@@ -39,19 +39,22 @@ RLT_INTEGRATION=1 uv run --extra pi --extra test pytest tests/policies/pi05_rlt/
 ## 3. Stage 1: RL Token 学習（lerobot-train を使用）
 
 ```bash
-uv run --extra pi lerobot-train \
+uv sync --extra pi --extra training   # datasets等を含む学習依存
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+uv run --no-sync lerobot-train \
   --policy.type=pi05_rlt \
   --policy.pretrained_path=lerobot/pi05_libero_finetuned \
   --policy.train_stage=rl_token \
   --policy.device=cuda \
+  --policy.compile_model=false \
   --policy.optimizer_lr=1e-4 \
+  --policy.push_to_hub=false \
   --dataset.repo_id=HuggingFaceVLA/libero \
-  --dataset.episodes="$(python -c 'print(list(range(200)))')" \
+  --dataset.episodes="$(python -c 'print(list(range(0, 1693, 8)))')" \
   --batch_size=8 \
   --steps=3000 \
   --save_freq=1000 \
   --log_freq=25 \
-  --eval_freq=0 \
   --output_dir=outputs/pi05_rlt_stage1 \
   --job_name=pi05_rlt_stage1 \
   --wandb.enable=false
