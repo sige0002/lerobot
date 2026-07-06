@@ -7,10 +7,13 @@
 
 ```bash
 cd ~/lerobot
-uv sync --extra pi --extra libero        # pi05 + LIBERO シミュレータ
-export MUJOCO_GL=egl                      # ヘッドレス描画
-# （metaworld 検証時のみ: uv sync --extra pi --extra libero --extra metaworld）
+uv sync --extra pi --extra training --extra libero --extra metaworld --extra test
+export MUJOCO_GL=egl                      # ヘッドレス描画（必須）
+# LIBERO初回importの対話プロンプト回避（config.yaml生成、一度だけ）:
+printf 'N\n' | uv run --no-sync python -c "import libero.libero"
 ```
+
+動作確認済み環境: aarch64 DGX Spark GB10 / EGLヘッドレス。LIBERO ≈ 198 steps/s、Metaworld ≈ 599 steps/s（ランダム行動時）。
 
 チェックポイント / データセット（初回に自動DL）:
 
@@ -136,7 +139,7 @@ MUJOCO_GL=egl uv run --extra pi --extra libero lerobot-eval \
 
 ## 6. LIBERO以外の環境
 
-- **metaworld**（`--env.type=metaworld`）: pi05のmetaworld SFT checkpointが存在しないため性能評価は不可。`pi05_rlt` がenv非依存に動くこと（ロード・rollout・action shape・NaNなし・steps/sec）のパイプライン検証として実施。
+- **metaworld**（`--env.type=metaworld --env.task=metaworld-push-v3`）: **task名はv3を明示すること**（configs.pyのデフォルト`metaworld-push-v2`はmetaworld 3.0.0に存在せずKeyError）。pi05のmetaworld SFT checkpointが存在しないため性能評価は不可。`pi05_rlt` がenv非依存に動くこと（ロード・rollout・action shape・NaNなし・steps/sec）のパイプライン検証として実施。
 - **libero_plus**（`--env.type=libero_plus`）: LIBEROの摂動版（視点・配置・光源等）。同一checkpointで (a) vs (c) を評価しロバスト性を比較。ただしLIBERO-plusはgit fork のclone+PYTHONPATH導入が必要（`docker/Dockerfile.benchmark.libero_plus` 参照）。導入できない場合はその旨を記録して省略。
 
 ## 7. 判定基準まとめ
