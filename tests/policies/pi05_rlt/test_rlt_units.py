@@ -145,7 +145,9 @@ def test_actor_sample_deterministic_vs_stochastic():
 
 
 def test_twin_critic_min_q():
-    critic = TwinCritic(z_dim=WIDTH, proprio_dim=PROP, action_dim=ACT_DIM, chunk_size=C, hidden_dim=32, num_layers=2)
+    critic = TwinCritic(
+        z_dim=WIDTH, proprio_dim=PROP, action_dim=ACT_DIM, chunk_size=C, hidden_dim=32, num_layers=2
+    )
     z, p, a = torch.randn(3, WIDTH), torch.randn(3, PROP), torch.randn(3, C, ACT_DIM)
     q1, q2 = critic(z, p, a)
     assert q1.shape == q2.shape == (3,)
@@ -239,7 +241,7 @@ def test_assembler_terminal_reward_and_padding():
 def test_assembler_skips_steps_without_z():
     asm = ChunkTransitionAssembler(chunk_size=C, gamma=0.9, stride=2)
     asm.add_boundary(0, _make_ref_h(0))
-    for t in range(6):
+    for _t in range(6):
         asm.add_step(action=torch.zeros(ACT_DIM), reward=0.0, done=False, z=None, proprio=None)
     assert asm.finish_episode() == []
 
@@ -315,23 +317,22 @@ def test_updater_critic_and_delayed_actor():
     assert "actor_loss" not in m1  # delayed
     assert any(
         not torch.allclose(a, b)
-        for a, b in zip(critic_before, [p for p in policy.rlt.critic.parameters()], strict=True)
+        for a, b in zip(critic_before, list(policy.rlt.critic.parameters()), strict=True)
     )
     assert all(
-        torch.allclose(a, b)
-        for a, b in zip(actor_before, [p for p in policy.rlt.actor.parameters()], strict=True)
+        torch.allclose(a, b) for a, b in zip(actor_before, list(policy.rlt.actor.parameters()), strict=True)
     )
 
     m2 = updater.update(_rand_batch())
     assert "actor_loss" in m2 and math.isfinite(m2["actor_loss"])
     assert any(
         not torch.allclose(a, b)
-        for a, b in zip(actor_before, [p for p in policy.rlt.actor.parameters()], strict=True)
+        for a, b in zip(actor_before, list(policy.rlt.actor.parameters()), strict=True)
     )
     # Target critic moved after the actor update.
     assert any(
         not torch.allclose(a, b)
-        for a, b in zip(target_before, [p for p in policy.rlt.critic_target.parameters()], strict=True)
+        for a, b in zip(target_before, list(policy.rlt.critic_target.parameters()), strict=True)
     )
 
 

@@ -148,9 +148,7 @@ class PI05RLTPolicy(PI05Policy):
         tokens, masks = batch[OBS_LANGUAGE_TOKENS], batch[OBS_LANGUAGE_ATTENTION_MASK]
 
         model = self.model
-        prefix_embs, prefix_pad_masks, prefix_att_masks = model.embed_prefix(
-            images, img_masks, tokens, masks
-        )
+        prefix_embs, prefix_pad_masks, prefix_att_masks = model.embed_prefix(images, img_masks, tokens, masks)
         prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
         prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
         prefix_att_2d_masks_4d = model._prepare_attention_masks_4d(prefix_att_2d_masks)

@@ -38,7 +38,7 @@ success reward).
 import json
 import logging
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from pprint import pformat
 
@@ -201,9 +201,7 @@ class OnlineRLTTrainer:
 
     # ------------------------------------------------------------------
 
-    def run_episode(
-        self, mode: str, stochastic: bool, collect: bool = True, seed: int | None = None
-    ) -> dict:
+    def run_episode(self, mode: str, stochastic: bool, collect: bool = True, seed: int | None = None) -> dict:
         """Run one episode; returns episode stats and (optionally) fills the buffer."""
         cfg = self.cfg
         self.policy.config.rlt_actor_mode = mode
@@ -252,7 +250,9 @@ class OnlineRLTTrainer:
             if collect and pending_z:
                 z_batch, prop_batch = compute_z_batched(self.policy, [b for _, b in pending_z])
                 for i, (s, _) in enumerate(pending_z):
-                    step_records.append({"step": s, "z": z_batch[i].clone(), "proprio": prop_batch[i].clone()})
+                    step_records.append(
+                        {"step": s, "z": z_batch[i].clone(), "proprio": prop_batch[i].clone()}
+                    )
                 pending_z.clear()
 
         transitions = []
@@ -306,7 +306,9 @@ class OnlineRLTTrainer:
         for episode in range(cfg.episodes):
             is_warmup = episode < cfg.warmup_episodes
             mode = "reference" if is_warmup else "actor"
-            stats = self.run_episode(mode=mode, stochastic=not is_warmup, collect=True, seed=cfg.seed + episode)
+            stats = self.run_episode(
+                mode=mode, stochastic=not is_warmup, collect=True, seed=cfg.seed + episode
+            )
 
             # Gradient updates: utd steps per collected transition.
             update_metrics: dict[str, float] = {}
