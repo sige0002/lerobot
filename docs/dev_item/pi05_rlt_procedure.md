@@ -53,7 +53,7 @@ uv run --no-sync lerobot-train \
   --policy.optimizer_lr=1e-4 \
   --policy.push_to_hub=false \
   --dataset.repo_id=HuggingFaceVLA/libero \
-  --dataset.episodes="$(python -c 'print(list(range(200)))')" \
+  --dataset.episodes="$(python -c 'print(list(range(128)))')" \
   --batch_size=8 \
   --steps=3000 \
   --save_freq=1000 \
@@ -63,11 +63,26 @@ uv run --no-sync lerobot-train \
   --wandb.enable=false
 ```
 
-- **episodesは連続レンジで指定すること**: `range(0,1693,8)` のような疎な選択は datasets sampler の KeyError バグを踏む（先頭チャンクしか materialize されず、選択エピソードのフレームがロードされない）。連続 `list(range(N))` なら安全。Stage 2 の対象タスク（libero_object）を含む連続ブロックを選ぶのが望ましい（`LeRobotDatasetMetadata` の episodes→task 対応で確認）。
+- **episodesは0始まりの連続レンジで指定すること**: 疎な選択（range(0,1693,8)）や高index帯の連続レンジ（range(807,1007)）は datasets のサブセットローダが先頭チャンクしか materialize しないため KeyError / "no data" になる。`list(range(128))` は検証済み（=libero_10/90 のデモ約34.7k frames）。学習前に `len(dataset)` が期待フレーム数と一致することを確認する。
 - `train_stage=rl_token` により `PI05RLTPolicy.forward()` は再構成損失 L_ro（式(2)、自己回帰・sgターゲット）を返し、optimizer は encoder/decoder のみ更新（pi05はfreeze）。
 - 論文の目安: 2000〜10000 steps。まず3000で損失曲線を確認。
 - 判定基準: reconstruction loss が単調減少し、初期値から1桁以上下がること。
 - 成果物: `outputs/pi05_rlt_stage1/checkpoints/last/pretrained_model`
+
+## 3.5 Stage 2対象タスクの選定（クイックスキャン）
+
+Stage 1 データ（ep0-127 = libero_10/90）と分布を合わせるため、Stage 2/評価は **libero_10 内のタスク**で行う。全10タスクを各10エピソードでベースライン評価し、success rate が中程度（30〜80%目安）のタスクを選定する:
+
+```bash
+MUJOCO_GL=egl uv run --no-sync lerobot-eval \
+  --policy.type=pi05 --policy.pretrained_path=lerobot/pi05_libero_finetuned \
+  --policy.device=cuda \
+  --env.type=libero --env.task=libero_10 \
+  --eval.n_episodes=10 --eval.batch_size=1 \
+  --output_dir=outputs/eval_pi05_libero10_scan --seed=1000
+```
+
+（全タスク90%超なら最低のタスク、全タスク30%未満なら最高のタスクを選ぶ）
 
 ## 4. Stage 2: オンラインRL（TD3系）
 
@@ -79,8 +94,8 @@ MUJOCO_GL=egl uv run --extra pi --extra libero python -m lerobot.scripts.rlt.tra
   --policy.bc_beta=1.0 \
   --policy.rlt_fixed_std=0.05 \
   --env.type=libero \
-  --env.task=libero_object \
-  --env.task_ids='[0]' \
+  --env.task=libero_10 \
+  --env.task_ids='[選定したtask id]' \
   --episodes=120 \
   --warmup_episodes=15 \
   --stride=2 \
@@ -109,7 +124,7 @@ MUJOCO_GL=egl uv run --extra pi --extra libero lerobot-eval \
   --policy.type=pi05 \
   --policy.pretrained_path=lerobot/pi05_libero_finetuned \
   --policy.device=cuda \
-  --env.type=libero --env.task=libero_object --env.task_ids='[0]' \
+  --env.type=libero --env.task=libero_10 --env.task_ids='[選定したtask id]' \
   --eval.n_episodes=50 --eval.batch_size=1 \
   --output_dir=outputs/eval_pi05_base --seed=1000
 
@@ -119,7 +134,7 @@ MUJOCO_GL=egl uv run --extra pi --extra libero lerobot-eval \
   --policy.pretrained_path=outputs/pi05_rlt_stage1/checkpoints/last/pretrained_model \
   --policy.rlt_actor_mode=reference \
   --policy.device=cuda \
-  --env.type=libero --env.task=libero_object --env.task_ids='[0]' \
+  --env.type=libero --env.task=libero_10 --env.task_ids='[選定したtask id]' \
   --eval.n_episodes=50 --eval.batch_size=1 \
   --output_dir=outputs/eval_pi05_rlt_reference --seed=1000
 
@@ -127,7 +142,7 @@ MUJOCO_GL=egl uv run --extra pi --extra libero lerobot-eval \
 MUJOCO_GL=egl uv run --extra pi --extra libero lerobot-eval \
   --policy.path=outputs/pi05_rlt_stage2/checkpoints/last \
   --policy.device=cuda \
-  --env.type=libero --env.task=libero_object --env.task_ids='[0]' \
+  --env.type=libero --env.task=libero_10 --env.task_ids='[選定したtask id]' \
   --eval.n_episodes=50 --eval.batch_size=1 \
   --output_dir=outputs/eval_pi05_rlt_stage2 --seed=1000
 ```
