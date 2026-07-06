@@ -382,3 +382,34 @@ def test_config_validation():
         PI05RLTConfig(rlt_actor_mode="residual")  # residual mode intentionally absent
     cfg = PI05RLTConfig(rlt_enabled=False)
     assert cfg.n_action_steps == 50  # untouched when RLT disabled
+
+
+# ---------------------------------------------------------------------------
+# compute_z_batched (regression: non-tensor batch entries must merge safely)
+# ---------------------------------------------------------------------------
+
+
+def test_compute_z_batched_merges_tensors_and_scalars():
+    from lerobot.policies.pi05_rlt.online_rl import compute_z_batched
+
+    captured = {}
+
+    class FakePolicy:
+        def extract_rl_token(self, merged):
+            captured.update(merged)
+            return torch.zeros(merged["img"].shape[0], WIDTH)
+
+        def _get_proprio(self, merged):
+            return torch.zeros(merged["img"].shape[0], PROP)
+
+    batches = [
+        {"img": torch.randn(1, 3), "task": ["put the bowl"], "idx": 7},
+        {"img": torch.randn(1, 3), "task": ["put the bowl"], "idx": 8},
+        {"img": torch.randn(1, 3), "task": ["put the bowl"], "idx": 9},
+    ]
+    z, proprio = compute_z_batched(FakePolicy(), batches)
+    assert z.shape == (3, WIDTH)
+    assert proprio.shape == (3, PROP)
+    assert captured["img"].shape == (3, 3)
+    assert captured["task"] == ["put the bowl"] * 3  # list entries flattened
+    assert captured["idx"] == [7, 8, 9]  # scalars collected, no np.concatenate crash

@@ -32,7 +32,6 @@ Implements, following the RLT paper:
 
 from dataclasses import dataclass, field
 
-import numpy as np
 import torch
 from torch import Tensor
 
@@ -315,7 +314,15 @@ def compute_z_batched(
         if isinstance(vals[0], torch.Tensor):
             merged[key] = torch.cat(vals, dim=0)
         else:
-            merged[key] = np.concatenate([np.asarray(v) for v in vals]).tolist()
+            # Non-tensor entries (e.g. "task" strings) are per-sample scalars or
+            # length-1 lists; flatten them into one list of length N.
+            flat = []
+            for v in vals:
+                if isinstance(v, (list, tuple)):
+                    flat.extend(v)
+                else:
+                    flat.append(v)
+            merged[key] = flat
     with torch.no_grad():
         z = policy.extract_rl_token(merged)
         proprio = policy._get_proprio(merged)
