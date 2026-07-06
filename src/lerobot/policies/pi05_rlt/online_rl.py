@@ -316,6 +316,7 @@ def compute_z_batched(
             merged[key] = torch.cat(vals, dim=0)
         else:
             merged[key] = np.concatenate([np.asarray(v) for v in vals]).tolist()
-    z = policy.extract_rl_token(merged)
-    proprio = policy._get_proprio(merged)
+    with torch.no_grad():
+        z = policy.extract_rl_token(merged)
+        proprio = policy._get_proprio(merged)
     return z, proprio
