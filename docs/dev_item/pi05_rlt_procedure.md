@@ -53,7 +53,7 @@ uv run --no-sync lerobot-train \
   --policy.optimizer_lr=1e-4 \
   --policy.push_to_hub=false \
   --dataset.repo_id=HuggingFaceVLA/libero \
-  --dataset.episodes="$(python -c 'print(list(range(0, 1693, 8)))')" \
+  --dataset.episodes="$(python -c 'print(list(range(200)))')" \
   --batch_size=8 \
   --steps=3000 \
   --save_freq=1000 \
@@ -63,6 +63,7 @@ uv run --no-sync lerobot-train \
   --wandb.enable=false
 ```
 
+- **episodesは連続レンジで指定すること**: `range(0,1693,8)` のような疎な選択は datasets sampler の KeyError バグを踏む（先頭チャンクしか materialize されず、選択エピソードのフレームがロードされない）。連続 `list(range(N))` なら安全。Stage 2 の対象タスク（libero_object）を含む連続ブロックを選ぶのが望ましい（`LeRobotDatasetMetadata` の episodes→task 対応で確認）。
 - `train_stage=rl_token` により `PI05RLTPolicy.forward()` は再構成損失 L_ro（式(2)、自己回帰・sgターゲット）を返し、optimizer は encoder/decoder のみ更新（pi05はfreeze）。
 - 論文の目安: 2000〜10000 steps。まず3000で損失曲線を確認。
 - 判定基準: reconstruction loss が単調減少し、初期値から1桁以上下がること。
