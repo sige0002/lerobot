@@ -36,6 +36,10 @@ def base_setup(device):
     cfg = PreTrainedConfig.from_pretrained(CHECKPOINT)
     cfg.pretrained_path = CHECKPOINT
     cfg.device = str(device)
+    # Parity must be verified in eager mode: torch.compile(max-autotune) uses
+    # CUDAGraphs (whose static buffers break repeated-output comparison) and
+    # numerically different fused kernels (~1e-2 drift between instances).
+    cfg.compile_model = False
     policy = PI05Policy.from_pretrained(CHECKPOINT, config=cfg)
     policy.to(device)
     policy.eval()
@@ -57,6 +61,7 @@ def rlt_policy(base_setup, device):
     cfg = PI05RLTConfig.from_pi05_config(base_cfg, rlt_enabled=True, rlt_actor_mode="reference")
     cfg.pretrained_path = CHECKPOINT
     cfg.device = str(device)
+    cfg.compile_model = False
     policy = PI05RLTPolicy.from_pretrained(CHECKPOINT, config=cfg)
     policy.to(device)
     policy.eval()
@@ -103,7 +108,7 @@ def test_parity_rlt_disabled(base_setup, rlt_policy, batch, device):
     """rlt_enabled=false must reproduce pi05 exactly (same weights, same noise)."""
     _, base_policy, _, _ = base_setup
     noise = _fixed_noise(base_policy, device)
-    base_actions = base_policy.predict_action_chunk(dict(batch), noise=noise)
+    base_actions = base_policy.predict_action_chunk(dict(batch), noise=noise).clone()
 
     rlt_policy.config.rlt_enabled = False
     try:
@@ -118,7 +123,7 @@ def test_parity_reference_mode(base_setup, rlt_policy, batch, device):
     path replicates PI05Pytorch.sample_actions op-for-op."""
     _, base_policy, _, _ = base_setup
     noise = _fixed_noise(base_policy, device)
-    base_actions = base_policy.predict_action_chunk(dict(batch), noise=noise)
+    base_actions = base_policy.predict_action_chunk(dict(batch), noise=noise).clone()
 
     rlt_policy.config.rlt_actor_mode = "reference"
     out = rlt_policy.predict_rlt_chunk(dict(batch), noise=noise)

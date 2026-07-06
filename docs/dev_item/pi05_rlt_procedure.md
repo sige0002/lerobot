@@ -17,10 +17,13 @@ export MUJOCO_GL=egl                      # ヘッドレス描画
 - ベースモデル: `lerobot/pi05_libero_finetuned`（LIBERO SFT済み pi05。RLT論文の「base VLA policy＝タスクSFT済みモデル」に相当）
 - Stage 1 データ: `HuggingFaceVLA/libero`（LIBERO teleopデモ）
 
+
+> **注意**: 素の `uv run` は依存を default セットに再同期し extras（transformers等）を外すため、**全コマンドで `--extra` を明示**すること（または `uv sync --extra ...` 後に `uv run --no-sync`）。
+
 ## 1. ユニットテスト（CPU）
 
 ```bash
-uv run pytest tests/policies/pi05_rlt/test_rlt_units.py -v
+uv run --extra test pytest tests/policies/pi05_rlt/test_rlt_units.py -v
 ```
 
 対象: RLTokenEncoder/Decoder（pad不変性・自己回帰再構成・勾配）、RLTActor（full chunk出力・**reference dropout時の独立性**）、TwinCritic、target soft update、ChunkTransitionAssembler（stride-2・γ割引・終端処理・ref窓スライス）、RLTReplayBuffer、TD3更新則（critic毎回・actor遅延・done時bootstrap遮断）、policy登録。
@@ -28,7 +31,7 @@ uv run pytest tests/policies/pi05_rlt/test_rlt_units.py -v
 ## 2. 統合テスト（GPU・チェックポイントDL）
 
 ```bash
-RLT_INTEGRATION=1 uv run pytest tests/policies/pi05_rlt/test_pi05_rlt_integration.py -v -x
+RLT_INTEGRATION=1 uv run --extra pi --extra test pytest tests/policies/pi05_rlt/test_pi05_rlt_integration.py -v -x
 ```
 
 対象: バックボーン重み同一性・freeze、**rlt_enabled=false での pi05 完全一致（atol=0）**、referenceモードのpi05一致（atol=1e-4）、z_rl抽出、actorモードの影響範囲（先頭C=10のみ）、Stage 1再構成lossの減少、Stage 1後のpi05重み不変。
@@ -36,7 +39,7 @@ RLT_INTEGRATION=1 uv run pytest tests/policies/pi05_rlt/test_pi05_rlt_integratio
 ## 3. Stage 1: RL Token 学習（lerobot-train を使用）
 
 ```bash
-uv run lerobot-train \
+uv run --extra pi lerobot-train \
   --policy.type=pi05_rlt \
   --policy.pretrained_path=lerobot/pi05_libero_finetuned \
   --policy.train_stage=rl_token \
@@ -62,7 +65,7 @@ uv run lerobot-train \
 ## 4. Stage 2: オンラインRL（TD3系）
 
 ```bash
-MUJOCO_GL=egl uv run python -m lerobot.scripts.rlt.train_pi05_rlt_online \
+MUJOCO_GL=egl uv run --extra pi --extra libero python -m lerobot.scripts.rlt.train_pi05_rlt_online \
   --policy.type=pi05_rlt \
   --policy.pretrained_path=outputs/pi05_rlt_stage1/checkpoints/last/pretrained_model \
   --policy.device=cuda \
@@ -95,7 +98,7 @@ MUJOCO_GL=egl uv run python -m lerobot.scripts.rlt.train_pi05_rlt_online \
 
 ```bash
 # (a) ベースライン: pi05そのもの
-MUJOCO_GL=egl uv run lerobot-eval \
+MUJOCO_GL=egl uv run --extra pi --extra libero lerobot-eval \
   --policy.type=pi05 \
   --policy.pretrained_path=lerobot/pi05_libero_finetuned \
   --policy.device=cuda \
@@ -104,7 +107,7 @@ MUJOCO_GL=egl uv run lerobot-eval \
   --output_dir=outputs/eval_pi05_base --seed=1000
 
 # (b) pi05_rlt referenceモード（(a)と統計的に同等であること＝非破壊性の確認）
-MUJOCO_GL=egl uv run lerobot-eval \
+MUJOCO_GL=egl uv run --extra pi --extra libero lerobot-eval \
   --policy.type=pi05_rlt \
   --policy.pretrained_path=outputs/pi05_rlt_stage1/checkpoints/last/pretrained_model \
   --policy.rlt_actor_mode=reference \
@@ -114,7 +117,7 @@ MUJOCO_GL=egl uv run lerobot-eval \
   --output_dir=outputs/eval_pi05_rlt_reference --seed=1000
 
 # (c) pi05_rlt Stage 2後（actorモード・決定論）
-MUJOCO_GL=egl uv run lerobot-eval \
+MUJOCO_GL=egl uv run --extra pi --extra libero lerobot-eval \
   --policy.path=outputs/pi05_rlt_stage2/checkpoints/last \
   --policy.device=cuda \
   --env.type=libero --env.task=libero_object --env.task_ids='[0]' \
