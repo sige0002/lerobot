@@ -179,3 +179,23 @@ def test_backbone_untouched_by_stage1(base_setup, rlt_policy):
     rlt_sd = rlt_policy.model.state_dict()
     for k in base_sd:
         assert torch.equal(base_sd[k], rlt_sd[k]), f"backbone changed during Stage 1: {k}"
+
+
+def test_save_load_roundtrip_preserves_rlt_weights(rlt_policy, tmp_path_factory):
+    """Regression: PI05Policy.from_pretrained's key remap used to mangle rlt.*
+    into model.rlt.* and silently drop all RLT weights (loading fresh random
+    modules instead). A saved pi05_rlt checkpoint must restore rlt.* exactly."""
+    from lerobot.policies.pi05_rlt.modeling_pi05_rlt import PI05RLTPolicy
+
+    save_dir = tmp_path_factory.mktemp("rlt_roundtrip")
+    rlt_policy.config.rlt_actor_mode = "actor"
+    rlt_policy.save_pretrained(save_dir)
+
+    reloaded = PI05RLTPolicy.from_pretrained(str(save_dir), config=rlt_policy.config)
+    reloaded.to(next(rlt_policy.parameters()).device)
+
+    src = rlt_policy.rlt.state_dict()
+    dst = reloaded.rlt.state_dict()
+    assert src.keys() == dst.keys()
+    mismatched = [k for k in src if not torch.equal(src[k], dst[k].to(src[k].device))]
+    assert not mismatched, f"RLT weights lost in save/load roundtrip: {mismatched[:5]}"

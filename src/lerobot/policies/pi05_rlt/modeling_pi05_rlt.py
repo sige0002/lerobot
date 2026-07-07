@@ -118,12 +118,45 @@ class PI05RLTPolicy(PI05Policy):
                 "PI05RLTPolicy requires a PI05RLTConfig. Use --policy.type=pi05_rlt with "
                 "--policy.pretrained_path pointing at a pi05 or pi05_rlt checkpoint."
             )
-        return super().from_pretrained(
+        model = super().from_pretrained(
             pretrained_name_or_path,
             config=config,
             strict=strict,
             **kwargs,
         )
+        # PI05Policy.from_pretrained prefixes every key that does not start with
+        # "model." with "model.", which mangles our "rlt.*" keys into
+        # "model.rlt.*" — they are then silently dropped under strict=False.
+        # Load the RLT module weights directly from the checkpoint here.
+        try:
+            from safetensors.torch import load_file
+            from transformers.utils import cached_file
+
+            resolved_file = cached_file(
+                pretrained_name_or_path,
+                "model.safetensors",
+                cache_dir=kwargs.get("cache_dir"),
+                force_download=kwargs.get("force_download", False),
+                proxies=kwargs.get("proxies"),
+                token=kwargs.get("token"),
+                revision=kwargs.get("revision"),
+                local_files_only=kwargs.get("local_files_only", False),
+            )
+            state_dict = load_file(resolved_file)
+            rlt_state_dict = {
+                k[len("rlt.") :]: v for k, v in state_dict.items() if k.startswith("rlt.")
+            }
+            if rlt_state_dict:
+                missing, unexpected = model.rlt.load_state_dict(rlt_state_dict, strict=False)
+                print(
+                    f"Loaded {len(rlt_state_dict)} RLT weights from checkpoint "
+                    f"({len(missing)} missing, {len(unexpected)} unexpected)"
+                )
+            else:
+                print("No rlt.* weights in checkpoint — RLT modules keep fresh initialization")
+        except Exception as e:
+            print(f"Warning: could not load RLT weights from checkpoint: {e}")
+        return model
 
     def get_optim_params(self) -> dict:
         if self.config.train_stage == "rl_token":
